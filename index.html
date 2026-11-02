@@ -4,29 +4,57 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mi lector de PDF</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2a2a30">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <style>
 :root { --bg:#f4f1ea; --fg:#222; --bar:#e6e1d6; --btn:#fff; --muted:#777; color-scheme: light; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) { --bg:#1b1b1f; --fg:#ddd; --bar:#2a2a30; --btn:#2c2c33; --muted:#999; color-scheme: dark; }
 }
 :root[data-theme="dark"] { --bg:#1b1b1f; --fg:#ddd; --bar:#2a2a30; --btn:#2c2c33; --muted:#999; color-scheme: dark; }
+[hidden] { display:none !important; }
 * { box-sizing: border-box; }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family: system-ui, sans-serif; }
 body { display:flex; flex-direction:column; padding-top: env(safe-area-inset-top,0px); padding-bottom: env(safe-area-inset-bottom,0px); }
 header { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 12px; background:var(--bar); }
-button { font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #888; background:var(--btn); color:var(--fg); cursor:pointer; }
-button:disabled { opacity:.4; cursor:default; }
+button, select, input, textarea { font:inherit; padding:6px 10px; border-radius:6px; border:1px solid #888; background:var(--btn); color:var(--fg); }
+button { cursor:pointer; }
+button:disabled, select:disabled { opacity:.4; cursor:default; }
 #info { margin-left:auto; font-size:14px; opacity:.8; }
-#library { display:none; padding:12px; background:var(--bar); border-top:1px solid #8884; max-height:45vh; overflow:auto; }
-#library.open { display:block; }
-#library h2 { font-size:16px; margin:0 0 8px; }
-.item { display:flex; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid #8883; }
-.item .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.item .meta { font-size:12px; color:var(--muted); }
-#viewer { flex:1; overflow:auto; display:flex; justify-content:center; align-items:flex-start; padding:16px; }
-canvas { max-width:100%; height:auto; box-shadow:0 2px 8px rgba(0,0,0,.25); background:#fff; }
+.panel { padding:12px; background:var(--bar); border-top:1px solid #8884; max-height:30vh; overflow:auto; }
+.panel.big { max-height:75vh; }
+.phead { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; }
+.phead h2 { font-size:16px; margin:0; }
+.phead button { padding:4px 8px; }
+.row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+.form { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.form textarea, .form input { flex:1 1 200px; }
+.item { padding:8px 0; border-bottom:1px solid #8883; display:flex; gap:8px; align-items:center; }
+.item .grow { flex:1; min-width:0; }
+.item .sub { font-size:12px; color:var(--muted); }
+.item .ctx { font-style:italic; opacity:.8; font-size:14px; }
+#viewer { flex:1; overflow:auto; padding:16px; }
+#viewer.orig { display:flex; justify-content:center; align-items:flex-start; }
+canvas { margin:auto; flex-shrink:0; height:auto; box-shadow:0 2px 8px rgba(0,0,0,.25); background:#fff; }
 #empty { margin:auto; text-align:center; padding:24px; max-width:420px; line-height:1.5; }
+#reader { max-width:720px; margin:0 auto; line-height:1.75; font-family: Georgia, 'Times New Roman', serif; font-size:20px; }
+#reader p { margin:0 0 .9em; overflow-wrap:anywhere; }
+#reader h2 { font-size:1.35em; line-height:1.3; margin:1.4em 0 .5em; }
+#reader .pg { font: 12px system-ui, sans-serif; opacity:.45; text-align:center; margin:2em 0 0; }
+#reader .note { font-family: system-ui, sans-serif; opacity:.7; font-style:italic; }
 #fileInput { display:none; }
+.card { padding:18px; border-radius:10px; background:var(--btn); text-align:center; font-size:20px; margin-bottom:10px; min-height:90px; }
+#revBack { margin-top:12px; font-size:16px; opacity:.85; }
+.hit { padding:8px 0; border-bottom:1px solid #8883; cursor:pointer; font-size:14px; }
+#viewer.paper-yellow { background:#f3e3a1; }
+#viewer.paper-yellow canvas { mix-blend-mode: multiply; }
+#viewer.paper-yellow #reader { color:#2a2410; }
+#viewer.paper-black { background:#000; }
+#viewer.paper-black canvas { filter: invert(1) hue-rotate(180deg); box-shadow:none; }
+#viewer.paper-black #reader { color:#e8e8e8; }
 </style>
 </head>
 <body>
@@ -34,44 +62,130 @@ canvas { max-width:100%; height:auto; box-shadow:0 2px 8px rgba(0,0,0,.25); back
   <button id="openBtn">Abrir PDF</button>
   <input type="file" id="fileInput" accept="application/pdf">
   <button id="libBtn">Biblioteca</button>
+  <button id="wordBtn">Cuaderno</button>
+  <button id="folderBtn">Carpetas</button>
+  <button id="reviewBtn">Repasar</button>
+  <button id="findBtn">Buscar</button>
+  <button id="chapBtn">Capítulos</button>
+  <button id="setBtn">Clave IA</button>
+  <select id="mode" title="Modo de lectura" disabled>
+    <option value="normal">Normal</option>
+    <option value="webtoon">Webtoon</option>
+    <option value="original">Original (con imágenes)</option>
+  </select>
   <button id="prev" disabled>◀</button>
   <span id="pageNum">–</span>
   <button id="next" disabled>▶</button>
   <button id="zoomOut" disabled>A−</button>
   <button id="zoomIn" disabled>A+</button>
+  <select id="bg" title="Color de fondo">
+    <option value="white">Hoja blanca</option>
+    <option value="yellow">Papel amarillo</option>
+    <option value="black">Negro</option>
+  </select>
   <button id="theme">🌓</button>
   <span id="info"></span>
 </header>
-<section id="library">
-  <h2>Mis libros</h2>
+
+<section id="library" class="panel" hidden>
+  <div class="phead"><h2>Mis libros</h2><button class="closeBtn">✕</button></div>
   <div id="libList"></div>
+</section>
+
+<section id="words" class="panel" hidden>
+  <div class="phead"><h2>Cuaderno</h2><span><button class="sizeBtn">Agrandar</button> <button class="closeBtn">✕</button></span></div>
+  <div class="row">
+    <select id="folderSel" title="Carpeta"></select>
+    <button id="goFolders">Gestionar carpetas</button>
+    <button id="exportBtn">Descargar carpeta</button>
+  </div>
+  <div class="form">
+    <textarea id="wordIn" rows="2" placeholder="Palabra, frase o idea"></textarea>
+    <textarea id="meaningIn" rows="2" placeholder="Significado o nota"></textarea>
+    <textarea id="ctxIn" rows="2" placeholder="Contexto (aparece al subrayar)"></textarea>
+    <button id="saveWord">Guardar en esta carpeta</button>
+    <button id="copyWords">Copiar lista</button>
+  </div>
+  <div id="wordList"></div>
+</section>
+
+<section id="folders" class="panel" hidden>
+  <div class="phead"><h2>Mis carpetas</h2><span><button class="sizeBtn">Agrandar</button> <button class="closeBtn">✕</button></span></div>
+  <div class="row">
+    <input id="folderIn" placeholder="Nombre de la carpeta, por ejemplo: Inglés - frases">
+    <button id="createFolder">Crear carpeta</button>
+  </div>
+  <div id="folderList"></div>
+</section>
+
+<section id="review" class="panel" hidden>
+  <div class="phead"><h2>Repaso</h2><button class="closeBtn">✕</button></div>
+  <div class="row"><select id="revFolder"></select><span id="revCount" class="sub"></span></div>
+  <div class="card"><div id="revFront"></div><div id="revBack" hidden></div></div>
+  <div class="row"><button id="revShow">Mostrar significado</button></div>
+  <div id="revRow" class="row" hidden><button id="revOk">La recordé</button><button id="revNo">Repasar después</button></div>
+</section>
+<section id="find" class="panel" hidden>
+  <div class="phead"><h2>Buscar en el libro</h2><button class="closeBtn">✕</button></div>
+  <div class="row"><input id="findIn" placeholder="Palabra o frase"><button id="findGo">Buscar</button></div>
+  <div id="findList"></div>
+</section>
+<section id="chap" class="panel" hidden>
+  <div class="phead"><h2>Capítulos</h2><button class="closeBtn">✕</button></div>
+  <div id="chapList"></div>
+</section>
+<section id="settings" class="panel" hidden>
+  <div class="phead"><h2>Clave de Gemini</h2><button class="closeBtn">✕</button></div>
+  <p class="sub">La clave se guarda solo en este navegador. La consigues en Google AI Studio.</p>
+  <div class="row"><input id="apiKey" type="password" placeholder="Pega tu clave aquí"><button id="saveKey">Guardar clave</button></div>
 </section>
 <main id="viewer">
   <div id="empty">
     <p>Abre un libro en PDF para empezar.</p>
     <p style="font-size:14px;opacity:.7">Tus libros se guardan en este navegador. El archivo no se sube a ningún servidor.</p>
   </div>
+  <div id="reader" hidden></div>
 </main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="pdf.min.js"></script>
 <script>
 const pdfjsLib = window.pdfjsLib;
-pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "pdf.worker.min.js";
 
 const $ = id => document.getElementById(id);
 const viewer = $('viewer');
+const reader = $('reader');
 const canvas = document.createElement('canvas');
+canvas.hidden = true;
+viewer.appendChild(canvas);
+
 const LIB_KEY = 'lector-pdf-library';
-let pdf = null, pageNo = 1, zoom = 1, currentId = null, rendering = false, pendingRender = false;
+let pdf = null, pageNo = 1, zoom = 1, fs = 20, mode = 'normal';
+let currentId = null, currentName = '', rendering = false, pendingRender = false, token = 0;
+let curFolder = '', editingFolder = null;
+const cache = new Map();
 
 /* ---------- Almacenamiento ---------- */
 
-function getLib() {
-  try { return JSON.parse(localStorage.getItem(LIB_KEY)) || []; } catch (e) { return []; }
+function pref(k, v) {
+  try {
+    if (v === undefined) return localStorage.getItem(k);
+    localStorage.setItem(k, v);
+  } catch (e) { return null; }
 }
-function setLib(list) {
-  try { localStorage.setItem(LIB_KEY, JSON.stringify(list)); } catch (e) {}
+function readJSON(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || []; } catch (e) { return []; }
 }
+function getLib() { return readJSON(LIB_KEY); }
+function setLib(list) { pref(LIB_KEY, JSON.stringify(list)); }
+function getFolders() { return readJSON('lector-pdf-folders'); }
+function setFolders(list) { pref('lector-pdf-folders', JSON.stringify(list)); }
+function getWords() {
+  return readJSON('lector-pdf-words').map(w => ({ ...w, text: w.text || w.word || '', folder: w.folder || '' }));
+}
+function setWords(list) { pref('lector-pdf-words', JSON.stringify(list)); }
+function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
 function openDB() {
   return new Promise((res, rej) => {
     const r = indexedDB.open('lector-pdf', 1);
@@ -90,8 +204,6 @@ async function dbRun(mode, fn) {
   });
 }
 
-/* ---------- Progreso ---------- */
-
 function saveProgress() {
   if (!currentId || !pdf) return;
   const list = getLib();
@@ -103,19 +215,126 @@ function saveProgress() {
   setLib(list);
 }
 
+/* ---------- Texto de cada página ---------- */
+
+async function getBlocks(n) {
+  if (cache.has(n)) return cache.get(n);
+  const page = await pdf.getPage(n);
+  const tc = await page.getTextContent();
+  const items = tc.items
+    .filter(i => i.str && i.str.trim())
+    .map(i => ({ s: i.str, x: i.transform[4], y: i.transform[5], w: i.width || 0, h: Math.hypot(i.transform[2], i.transform[3]) }));
+  items.sort((a, b) => Math.abs(a.y - b.y) > 2 ? b.y - a.y : a.x - b.x);
+
+  const lines = [];
+  for (const it of items) {
+    const L = lines[lines.length - 1];
+    if (L && Math.abs(L.y - it.y) <= 2) {
+      L.text += (it.x - L.xEnd > 2 ? ' ' : '') + it.s;
+      L.xEnd = it.x + it.w;
+      L.h = Math.max(L.h, it.h);
+    } else {
+      lines.push({ y: it.y, x: it.x, text: it.s, xEnd: it.x + it.w, h: it.h });
+    }
+  }
+  const clean = lines.filter(l => l.text.trim() && !/^\d{1,4}$/.test(l.text.trim()));
+  const med = arr => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length / 2)] || 0; };
+  const blocks = [];
+
+  if (clean.length) {
+    const medH = med(clean.map(l => l.h));
+    const medX = med(clean.map(l => l.x));
+    const gaps = [];
+    for (let i = 1; i < clean.length; i++) {
+      const g = clean[i - 1].y - clean[i].y;
+      if (g > 0) gaps.push(g);
+    }
+    const medGap = gaps.length ? med(gaps) : medH * 1.5;
+    let para = null;
+    clean.forEach((l, i) => {
+      const t = l.text.trim();
+      if (l.h > medH * 1.2 && t.length < 120) {
+        blocks.push({ t: 'h', text: t });
+        para = null;
+        return;
+      }
+      const gap = i > 0 ? clean[i - 1].y - l.y : 0;
+      const indented = l.x - medX > medH * 0.8;
+      if (!para || gap > medGap * 1.6 || indented) {
+        para = { t: 'p', text: t };
+        blocks.push(para);
+      } else {
+        para.text = para.text.endsWith('-') ? para.text.slice(0, -1) + t : para.text + ' ' + t;
+      }
+    });
+  }
+  cache.set(n, blocks);
+  return blocks;
+}
+
+function fillBlocks(container, blocks) {
+  blocks.forEach(b => {
+    const el = document.createElement(b.t === 'h' ? 'h2' : 'p');
+    el.textContent = b.text;
+    container.appendChild(el);
+  });
+}
+function addNote(container, msg) {
+  const p = document.createElement('p');
+  p.className = 'note';
+  p.textContent = msg;
+  container.appendChild(p);
+}
+
 /* ---------- Render ---------- */
 
-function setControls(enabled) {
-  ['zoomOut','zoomIn'].forEach(id => $(id).disabled = !enabled);
-}
 function updateButtons() {
   $('prev').disabled = !pdf || pageNo <= 1;
   $('next').disabled = !pdf || pageNo >= pdf.numPages;
   $('pageNum').textContent = pdf ? `${pageNo} / ${pdf.numPages}` : '–';
 }
-
-async function renderPage() {
+function applyLayout() {
+  viewer.classList.toggle('orig', mode === 'original');
+  canvas.hidden = mode !== 'original';
+  reader.hidden = mode === 'original';
+}
+function render() {
   if (!pdf) return;
+  applyLayout();
+  if (mode === 'original') renderCanvas();
+  else if (mode === 'normal') renderNormal();
+  else renderWebtoon();
+  updateButtons();
+}
+async function renderNormal() {
+  const my = ++token;
+  reader.textContent = '';
+  const blocks = await getBlocks(pageNo);
+  if (my !== token) return;
+  if (!blocks.length) addNote(reader, 'Esta página no tiene texto (puede ser una imagen). Usa el modo Original para verla.');
+  else fillBlocks(reader, blocks);
+  viewer.scrollTop = 0;
+}
+async function renderWebtoon() {
+  const my = ++token;
+  reader.textContent = '';
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const blocks = await getBlocks(n);
+    if (my !== token) return;
+    const sec = document.createElement('section');
+    sec.dataset.page = n;
+    fillBlocks(sec, blocks);
+    const pg = document.createElement('div');
+    pg.className = 'pg';
+    pg.textContent = '— ' + n + ' —';
+    sec.appendChild(pg);
+    reader.appendChild(sec);
+    if (n === pageNo) sec.scrollIntoView({ block: 'start' });
+    if (n % 5 === 0 || n === pdf.numPages) $('info').textContent = `Preparando texto… ${n}/${pdf.numPages}`;
+  }
+  $('info').textContent = currentName;
+}
+async function renderCanvas() {
   if (rendering) { pendingRender = true; return; }
   rendering = true;
   try {
@@ -125,50 +344,57 @@ async function renderPage() {
     const viewport = page.getViewport({ scale: Math.max(0.3, fit) * zoom * quality });
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    canvas.style.width = Math.min(viewport.width, viewer.clientWidth - 32) + 'px';
-    canvas.style.height = 'auto';
+    canvas.style.width = (viewport.width / quality) + 'px';
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-    if (!viewer.contains(canvas)) {
-      const empty = $('empty');
-      if (empty) empty.remove();
-      viewer.appendChild(canvas);
-    }
     viewer.scrollTop = 0;
   } catch (err) {
     $('info').textContent = 'Error al mostrar la página';
   }
   rendering = false;
-  updateButtons();
-  if (pendingRender) { pendingRender = false; renderPage(); }
+  if (pendingRender) { pendingRender = false; renderCanvas(); }
 }
-
 function goTo(n) {
   if (!pdf || n < 1 || n > pdf.numPages) return;
   pageNo = n;
   saveProgress();
   updateButtons();
-  renderPage();
+  if (mode === 'webtoon') {
+    const s = reader.querySelector(`section[data-page="${n}"]`);
+    if (s) s.scrollIntoView({ block: 'start' });
+    return;
+  }
+  render();
+}
+function setMode(m) {
+  mode = m;
+  pref('lector-pdf-mode', m);
+  $('mode').value = m;
+  render();
 }
 
 /* ---------- Abrir libros ---------- */
 
+function setControls(enabled) {
+  ['zoomOut', 'zoomIn', 'mode'].forEach(id => $(id).disabled = !enabled);
+}
 async function loadDocument(blob, name, id, startPage) {
   try {
     const data = new Uint8Array(await blob.arrayBuffer());
     pdf = await pdfjsLib.getDocument({ data }).promise;
     currentId = id;
+    currentName = name;
+    cache.clear();
     pageNo = Math.min(Math.max(startPage || 1, 1), pdf.numPages);
     $('info').textContent = name;
+    $('empty').hidden = true;
     setControls(true);
-    updateButtons();
     saveProgress();
-    renderPage();
+    render();
     renderLibrary();
   } catch (err) {
     $('info').textContent = 'No pude abrir ese archivo';
   }
 }
-
 async function openFile(file) {
   const id = file.name + ':' + file.size;
   try { await dbRun('readwrite', s => s.put(file, id)); } catch (e) {}
@@ -181,7 +407,6 @@ async function openFile(file) {
   }
   loadDocument(file, file.name, id, item.page);
 }
-
 async function openFromLibrary(id) {
   const item = getLib().find(b => b.id === id);
   if (!item) return;
@@ -191,19 +416,15 @@ async function openFromLibrary(id) {
     $('info').textContent = 'Vuelve a abrir este archivo para continuar';
     return;
   }
-  $('library').classList.remove('open');
+  $('library').hidden = true;
   loadDocument(blob, item.name, id, item.page);
 }
-
 async function removeFromLibrary(id) {
   setLib(getLib().filter(b => b.id !== id));
   try { await dbRun('readwrite', s => s.delete(id)); } catch (e) {}
   if (currentId === id) currentId = null;
   renderLibrary();
 }
-
-/* ---------- Biblioteca ---------- */
-
 function renderLibrary() {
   const box = $('libList');
   box.textContent = '';
@@ -218,13 +439,12 @@ function renderLibrary() {
     const row = document.createElement('div');
     row.className = 'item';
     const info = document.createElement('div');
-    info.className = 'name';
+    info.className = 'grow';
     const title = document.createElement('div');
     title.textContent = b.name;
     const meta = document.createElement('div');
-    meta.className = 'meta';
-    const progress = b.total ? `página ${b.page} de ${b.total}` : `página ${b.page}`;
-    meta.textContent = progress + ' · ' + new Date(b.updated).toLocaleDateString('es');
+    meta.className = 'sub';
+    meta.textContent = (b.total ? `página ${b.page} de ${b.total}` : `página ${b.page}`) + ' · ' + new Date(b.updated).toLocaleDateString('es');
     info.append(title, meta);
     const open = document.createElement('button');
     open.textContent = 'Abrir';
@@ -237,30 +457,405 @@ function renderLibrary() {
   });
 }
 
+/* ---------- Carpetas ---------- */
+
+function renderFolderSelect() {
+  const sel = $('folderSel');
+  sel.textContent = '';
+  const add = (value, label) => {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = label;
+    sel.appendChild(o);
+  };
+  add('', 'Sin carpeta');
+  getFolders().forEach(f => add(f.id, f.name));
+  if (!sel.querySelector(`option[value="${curFolder}"]`)) curFolder = '';
+  sel.value = curFolder;
+}
+function renderWords() {
+  renderFolderSelect();
+  const box = $('wordList');
+  box.textContent = '';
+  const list = getWords().filter(w => w.folder === curFolder).reverse();
+  if (!list.length) {
+    box.textContent = 'Esta carpeta está vacía. Selecciona texto en el libro o escribe aquí.';
+    return;
+  }
+  list.forEach(w => {
+    const row = document.createElement('div');
+    row.className = 'item';
+    const g = document.createElement('div');
+    g.className = 'grow';
+    const head = document.createElement('b');
+    head.textContent = w.text;
+    const mean = document.createElement('div');
+    mean.textContent = w.meaning || '(sin significado)';
+    g.append(head, mean);
+    if (w.context) {
+      const c = document.createElement('div');
+      c.className = 'ctx';
+      c.textContent = w.context;
+      g.appendChild(c);
+    }
+    const sub = document.createElement('div');
+    sub.className = 'sub';
+    sub.textContent = (w.bookName ? w.bookName + ' · ' : '') + 'p. ' + w.page;
+    g.appendChild(sub);
+    const del = document.createElement('button');
+    del.textContent = 'Borrar';
+    del.onclick = () => { setWords(getWords().filter(x => x.id !== w.id)); renderWords(); };
+    const ai = document.createElement('button');
+    ai.textContent = 'Explicar IA';
+    ai.onclick = () => explainAI(w, ai, g);
+    row.append(g, ai, del);
+    box.appendChild(row);
+  });
+}
+function saveWord() {
+  const text = $('wordIn').value.trim();
+  if (!text) return;
+  const list = getWords();
+  list.push({
+    id: newId(),
+    folder: curFolder,
+    book: currentId,
+    bookName: currentName,
+    text,
+    meaning: $('meaningIn').value.trim(),
+    context: $('ctxIn').value.trim(),
+    page: pageNo,
+    added: Date.now()
+  });
+  setWords(list);
+  $('wordIn').value = '';
+  $('meaningIn').value = '';
+  $('ctxIn').value = '';
+  renderWords();
+}
+async function copyWords() {
+  const text = getWords().filter(w => w.folder === curFolder)
+    .map(w => `${w.text}: ${w.meaning || ''}${w.context ? ' — "' + w.context + '"' : ''} (${w.bookName || ''} p. ${w.page})`)
+    .join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    $('info').textContent = 'Lista copiada';
+  } catch (e) {
+    $('info').textContent = 'No pude copiar la lista';
+  }
+}
+function grabSelection() {
+  const sel = window.getSelection();
+  const t = sel.toString().trim();
+  if (!t || t.length > 300) return;
+  const sample = t.replace(/\s+/g, ' ');
+  const node = sel.anchorNode;
+  const el = node && (node.nodeType === 3 ? node.parentNode : node);
+  const full = el ? el.textContent.replace(/\s+/g, ' ') : '';
+  const i = full.indexOf(sample);
+  let ctx = '';
+  if (i >= 0) {
+    const end = i + sample.length;
+    ctx = (i > 60 ? '…' : '') + full.slice(Math.max(0, i - 60), i) + '[' + sample + ']' + full.slice(end, end + 60) + (end + 60 < full.length ? '…' : '');
+  }
+  $('wordIn').value = sample;
+  $('ctxIn').value = ctx;
+  $('words').hidden = false;
+  renderWords();
+  $('meaningIn').focus();
+}
+function renderFolders() {
+  const box = $('folderList');
+  box.textContent = '';
+  const words = getWords();
+  const rows = [{ id: '', name: 'Sin carpeta' }, ...getFolders()];
+  rows.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'item';
+    const g = document.createElement('div');
+    g.className = 'grow';
+    const name = document.createElement('b');
+    name.textContent = f.name;
+    const count = document.createElement('div');
+    count.className = 'sub';
+    const n = words.filter(w => w.folder === f.id).length;
+    count.textContent = n + (n === 1 ? ' elemento' : ' elementos');
+    g.append(name, count);
+    const open = document.createElement('button');
+    open.textContent = 'Abrir';
+    open.onclick = () => { curFolder = f.id; pref('lector-pdf-folder', f.id); $('folders').hidden = true; $('words').hidden = false; renderWords(); };
+    row.append(g, open);
+    if (f.id) {
+      const ren = document.createElement('button');
+      ren.textContent = 'Renombrar';
+      ren.onclick = () => { editingFolder = f.id; $('folderIn').value = f.name; $('createFolder').textContent = 'Guardar nombre'; $('folderIn').focus(); };
+      const del = document.createElement('button');
+      del.textContent = 'Borrar';
+      del.onclick = () => {
+        setWords(getWords().map(w => w.folder === f.id ? { ...w, folder: '' } : w));
+        setFolders(getFolders().filter(x => x.id !== f.id));
+        if (curFolder === f.id) { curFolder = ''; pref('lector-pdf-folder', ''); }
+        renderFolders();
+      };
+      row.append(ren, del);
+    }
+    box.appendChild(row);
+  });
+}
+function createFolder() {
+  const name = $('folderIn').value.trim();
+  if (!name) return;
+  if (editingFolder) {
+    setFolders(getFolders().map(f => f.id === editingFolder ? { ...f, name } : f));
+    editingFolder = null;
+  } else {
+    const f = { id: newId(), name };
+    setFolders([...getFolders(), f]);
+    curFolder = f.id;
+    pref('lector-pdf-folder', f.id);
+  }
+  $('folderIn').value = '';
+  $('createFolder').textContent = 'Crear carpeta';
+  renderFolders();
+}
+
+/* ---------- Tamaño, fondo y tema ---------- */
+
+function changeSize(dir) {
+  if (mode === 'original') {
+    zoom = Math.min(3, Math.max(0.5, zoom + 0.2 * dir));
+    renderCanvas();
+  } else {
+    fs = Math.min(36, Math.max(14, fs + 2 * dir));
+    reader.style.fontSize = fs + 'px';
+    pref('lector-pdf-fs', fs);
+  }
+}
+function applyBg(v) {
+  viewer.classList.toggle('paper-yellow', v === 'yellow');
+  viewer.classList.toggle('paper-black', v === 'black');
+  pref('lector-pdf-bg', v);
+}
+
 /* ---------- Eventos ---------- */
 
 $('openBtn').onclick = () => $('fileInput').click();
 $('fileInput').onchange = e => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ''; };
-$('libBtn').onclick = () => { $('library').classList.toggle('open'); renderLibrary(); };
+$('libBtn').onclick = () => { $('library').hidden = !$('library').hidden; renderLibrary(); };
+$('wordBtn').onclick = () => { $('words').hidden = !$('words').hidden; renderWords(); };
+$('folderBtn').onclick = () => { $('folders').hidden = !$('folders').hidden; renderFolders(); };
+$('goFolders').onclick = () => { $('folders').hidden = false; renderFolders(); };
+$('folderSel').onchange = e => { curFolder = e.target.value; pref('lector-pdf-folder', curFolder); renderWords(); };
+$('saveWord').onclick = saveWord;
+$('copyWords').onclick = copyWords;
+$('createFolder').onclick = createFolder;
+$('mode').onchange = e => setMode(e.target.value);
 $('prev').onclick = () => goTo(pageNo - 1);
 $('next').onclick = () => goTo(pageNo + 1);
-$('zoomIn').onclick = () => { zoom = Math.min(3, zoom + 0.2); renderPage(); };
-$('zoomOut').onclick = () => { zoom = Math.max(0.5, zoom - 0.2); renderPage(); };
+$('zoomIn').onclick = () => changeSize(1);
+$('zoomOut').onclick = () => changeSize(-1);
+$('bg').onchange = e => applyBg(e.target.value);
 $('theme').onclick = () => {
   const root = document.documentElement;
   const dark = root.getAttribute('data-theme') === 'dark' ||
     (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
   root.setAttribute('data-theme', dark ? 'light' : 'dark');
 };
+document.querySelectorAll('.panel').forEach(p => {
+  const close = p.querySelector('.closeBtn');
+  if (close) close.onclick = () => { p.hidden = true; };
+  const size = p.querySelector('.sizeBtn');
+  if (size) size.onclick = () => {
+    p.classList.toggle('big');
+    size.textContent = p.classList.contains('big') ? 'Achicar' : 'Agrandar';
+  };
+});
+reader.addEventListener('mouseup', grabSelection);
+reader.addEventListener('touchend', () => setTimeout(grabSelection, 300));
+viewer.addEventListener('scroll', () => {
+  if (mode !== 'webtoon' || !pdf) return;
+  const top = viewer.getBoundingClientRect().top;
+  let cur = pageNo;
+  for (const s of reader.querySelectorAll('section')) {
+    if (s.getBoundingClientRect().top - top <= 120) cur = +s.dataset.page;
+    else break;
+  }
+  if (cur !== pageNo) {
+    pageNo = cur;
+    updateButtons();
+    saveProgress();
+  }
+});
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if (mode === 'webtoon') return;
   if (e.key === 'ArrowRight' || e.key === 'PageDown') goTo(pageNo + 1);
   if (e.key === 'ArrowLeft' || e.key === 'PageUp') goTo(pageNo - 1);
 });
 let resizeTimer;
-window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(renderPage, 200); });
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (pdf && mode === 'original') renderCanvas(); }, 200);
+});
 
+/* ---------- Buscar, capítulos, repaso, exportar e IA ---------- */
+
+const GEMINI_MODEL = 'gemini-3.5-flash';
+let deck = [], deckIdx = 0;
+
+function getKey() { return pref('lector-pdf-gemini-key') || ''; }
+
+async function findInBook() {
+  if (!pdf) return;
+  const q = $('findIn').value.trim().toLowerCase();
+  const box = $('findList');
+  box.textContent = '';
+  if (!q) return;
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const blocks = await getBlocks(n);
+    blocks.forEach(b => {
+      const i = b.text.toLowerCase().indexOf(q);
+      if (i < 0) return;
+      const row = document.createElement('div');
+      row.className = 'hit';
+      row.textContent = `p. ${n} · …${b.text.slice(Math.max(0, i - 60), i + q.length + 60)}…`;
+      row.onclick = () => { $('find').hidden = true; goTo(n); };
+      box.appendChild(row);
+    });
+    $('info').textContent = `Buscando… ${n}/${pdf.numPages}`;
+  }
+  $('info').textContent = currentName;
+  if (!box.children.length) box.textContent = 'No encontré esa palabra en el libro.';
+}
+
+async function showChapters() {
+  if (!pdf) return;
+  const box = $('chapList');
+  box.textContent = 'Buscando títulos…';
+  const found = [];
+  for (let n = 1; n <= pdf.numPages; n++) {
+    (await getBlocks(n)).forEach(b => { if (b.t === 'h') found.push({ n, text: b.text }); });
+  }
+  box.textContent = '';
+  if (!found.length) { box.textContent = 'No encontré títulos en este libro.'; return; }
+  found.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'hit';
+    row.textContent = `p. ${c.n} · ${c.text}`;
+    row.onclick = () => { $('chap').hidden = true; goTo(c.n); };
+    box.appendChild(row);
+  });
+}
+
+function fillRevFolders() {
+  const s = $('revFolder');
+  s.textContent = '';
+  [{ id: '', name: 'Sin carpeta' }, ...getFolders()].forEach(f => {
+    const o = document.createElement('option');
+    o.value = f.id;
+    o.textContent = f.name;
+    s.appendChild(o);
+  });
+  s.value = curFolder;
+}
+function startReview() {
+  const f = $('revFolder').value;
+  deck = getWords().filter(w => w.folder === f).sort(() => Math.random() - 0.5);
+  deckIdx = 0;
+  showCard();
+}
+function showCard() {
+  const done = deckIdx >= deck.length;
+  $('revRow').hidden = true;
+  $('revBack').hidden = true;
+  $('revShow').hidden = done || !deck.length;
+  if (!deck.length) { $('revFront').textContent = 'Esta carpeta no tiene elementos para repasar.'; $('revCount').textContent = ''; return; }
+  if (done) { $('revFront').textContent = '¡Terminaste el repaso!'; $('revCount').textContent = ''; return; }
+  const w = deck[deckIdx];
+  $('revFront').textContent = w.text;
+  $('revBack').textContent = (w.meaning || '(sin significado)') + (w.context ? ' — ' + w.context : '');
+  $('revCount').textContent = `${deckIdx + 1} / ${deck.length}`;
+}
+function reveal() {
+  $('revBack').hidden = false;
+  $('revShow').hidden = true;
+  $('revRow').hidden = false;
+}
+
+function exportFolder() {
+  const list = getWords().filter(w => w.folder === curFolder);
+  const folder = getFolders().find(f => f.id === curFolder);
+  const clean = v => String(v ?? '').split('\t').join(' ').split('\n').join(' ');
+  const rows = [['texto', 'significado', 'contexto', 'libro', 'pagina'], ...list.map(w => [w.text, w.meaning, w.context, w.bookName, w.page])];
+  const text = String.fromCharCode(0xfeff) + rows.map(r => r.map(clean).join('\t')).join('\n');
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (folder ? folder.name : 'sin-carpeta').split(' ').join('-') + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+async function explainAI(w, btn, box) {
+  const key = getKey();
+  if (!key) { $('settings').hidden = false; $('info').textContent = 'Primero guarda tu clave de Gemini'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Pensando…';
+  const prompt = `Explica en español qué significa "${w.text}" en esta frase: "${w.context || w.text}". Responde en máximo 2 frases cortas: solo el significado en ese contexto. Sin ejemplos, sin introducción, sin listas.`;
+  const out = document.createElement('div');
+  out.className = 'sub';
+  out.style.whiteSpace = 'pre-wrap';
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+    const data = await r.json();
+    out.textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text || ('Gemini no respondió: ' + (data?.error?.message || 'revisa tu clave'));
+  } catch (e) {
+    out.textContent = 'No pude conectar con Gemini desde aquí. Prueba en tu sitio de GitHub.';
+  }
+  box.appendChild(out);
+  btn.disabled = false;
+  btn.textContent = 'Explicar IA';
+}
+
+$('findBtn').onclick = () => { $('find').hidden = !$('find').hidden; };
+$('findGo').onclick = findInBook;
+$('findIn').addEventListener('keydown', e => { if (e.key === 'Enter') findInBook(); });
+$('chapBtn').onclick = () => { $('chap').hidden = !$('chap').hidden; if (!$('chap').hidden) showChapters(); };
+$('reviewBtn').onclick = () => { $('review').hidden = !$('review').hidden; if (!$('review').hidden) { fillRevFolders(); startReview(); } };
+$('revFolder').onchange = startReview;
+$('revShow').onclick = reveal;
+$('revOk').onclick = () => { deckIdx++; showCard(); };
+$('revNo').onclick = () => { if (deck[deckIdx]) deck.push(deck[deckIdx]); deckIdx++; showCard(); };
+$('exportBtn').onclick = exportFolder;
+$('setBtn').onclick = () => { $('settings').hidden = !$('settings').hidden; $('apiKey').value = getKey(); };
+$('saveKey').onclick = () => {
+  pref('lector-pdf-gemini-key', $('apiKey').value.trim());
+  $('info').textContent = 'Clave guardada en este navegador';
+  $('settings').hidden = true;
+};
+
+/* ---------- Inicio ---------- */
+
+mode = pref('lector-pdf-mode') || 'normal';
+$('mode').value = mode;
+fs = parseInt(pref('lector-pdf-fs'), 10) || 20;
+reader.style.fontSize = fs + 'px';
+curFolder = pref('lector-pdf-folder') || '';
+const savedBg = pref('lector-pdf-bg') || 'white';
+$('bg').value = savedBg;
+applyBg(savedBg);
+applyLayout();
 renderLibrary();
+
+/* ---------- App instalable y sin internet ---------- */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
