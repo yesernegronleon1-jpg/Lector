@@ -1,5 +1,5 @@
 // Cambia este número cada vez que subas una versión nueva de la app
-const VERSION = 'lector-v5';
+const VERSION = 'lector-v6';
 const FILES = ['./', './index.html', './pdf.min.js', './pdf.worker.min.js',
                './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 

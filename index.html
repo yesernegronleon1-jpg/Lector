@@ -55,10 +55,18 @@ canvas { margin:auto; flex-shrink:0; height:auto; box-shadow:0 2px 8px rgba(0,0,
 #viewer.paper-black { background:#000; }
 #viewer.paper-black canvas { filter: invert(1) hue-rotate(180deg); box-shadow:none; }
 #viewer.paper-black #reader { color:#e8e8e8; }
+#showBar { position:fixed; top:calc(env(safe-area-inset-top,0px) + 6px); right:8px; z-index:20; padding:4px 12px; font-size:13px; border-radius:16px; opacity:.55; }
+#showBar:hover, #showBar:active { opacity:1; }
+#chat { max-height:80vh; }
+#chatLog { max-height:45vh; overflow:auto; margin-bottom:8px; }
+.msg { padding:8px 12px; border-radius:10px; margin:6px 0; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.45; font-size:15px; }
+.msg.me { background:var(--btn); margin-left:15%; }
+.msg.ai { border:1px solid #8884; margin-right:8%; }
 </style>
 </head>
 <body>
-<header>
+<header id="bar">
+  <button id="hideBar" title="Ocultar esta barra para leer">▲ Ocultar</button>
   <button id="openBtn">Abrir PDF</button>
   <input type="file" id="fileInput" accept="application/pdf">
   <button id="libBtn">Biblioteca</button>
@@ -67,6 +75,7 @@ canvas { margin:auto; flex-shrink:0; height:auto; box-shadow:0 2px 8px rgba(0,0,
   <button id="reviewBtn">Repasar</button>
   <button id="findBtn">Buscar</button>
   <button id="chapBtn">Capítulos</button>
+  <button id="chatBtn">Chat IA</button>
   <button id="setBtn">Clave IA</button>
   <select id="mode" title="Modo de lectura" disabled>
     <option value="normal">Normal</option>
@@ -139,10 +148,20 @@ canvas { margin:auto; flex-shrink:0; height:auto; box-shadow:0 2px 8px rgba(0,0,
   <p class="sub">La clave se guarda solo en este navegador. La consigues en Google AI Studio.</p>
   <div class="row"><input id="apiKey" type="password" placeholder="Pega tu clave aquí"><button id="saveKey">Guardar clave</button></div>
 </section>
+<section id="chat" class="panel" hidden>
+  <div class="phead"><h2>Chat con Gemini</h2><span><button id="chatNew">Nueva conversación</button> <button class="closeBtn">✕</button></span></div>
+  <div id="chatLog"></div>
+  <div class="form">
+    <textarea id="chatIn" rows="2" placeholder="Escribe lo que quieras preguntarle a Gemini…"></textarea>
+    <button id="chatSend">Enviar</button>
+  </div>
+</section>
+<button id="showBar" hidden title="Mostrar la barra">☰</button>
 <main id="viewer">
   <div id="empty">
     <p>Abre un libro en PDF para empezar.</p>
     <p style="font-size:14px;opacity:.7">Tus libros se guardan en este navegador. El archivo no se sube a ningún servidor.</p>
+    <p style="font-size:14px;opacity:.7">Para pasar de página: toca el borde derecho o izquierdo de la pantalla, o desliza el dedo.</p>
   </div>
   <div id="reader" hidden></div>
 </main>
@@ -292,6 +311,7 @@ function updateButtons() {
   $('prev').disabled = !pdf || pageNo <= 1;
   $('next').disabled = !pdf || pageNo >= pdf.numPages;
   $('pageNum').textContent = pdf ? `${pageNo} / ${pdf.numPages}` : '–';
+  $('showBar').textContent = pdf ? `☰ ${pageNo} / ${pdf.numPages}` : '☰';
 }
 function applyLayout() {
   viewer.classList.toggle('orig', mode === 'original');
@@ -839,6 +859,119 @@ $('saveKey').onclick = () => {
   $('settings').hidden = true;
 };
 
+/* ---------- Ocultar / mostrar la barra de arriba ---------- */
+
+function setBar(show) {
+  $('bar').hidden = !show;
+  $('showBar').hidden = show;
+  pref('lector-pdf-bar', show ? '1' : '0');
+}
+$('hideBar').onclick = () => setBar(false);
+$('showBar').onclick = () => setBar(true);
+
+/* ---------- Pasar de página: tocar los bordes o deslizar ---------- */
+
+let hadSel = false, tStart = null;
+const hasSel = () => !!window.getSelection().toString().trim();
+function canFlip() {
+  if (!pdf || mode === 'webtoon') return false;
+  if (mode === 'original' && viewer.scrollWidth > viewer.clientWidth + 4) return false; // con zoom se arrastra, no se pasa
+  return true;
+}
+viewer.addEventListener('pointerdown', () => { hadSel = hasSel(); });
+viewer.addEventListener('click', e => {
+  if (!canFlip() || hadSel || hasSel()) return;
+  const r = viewer.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width;
+  if (x > 0.75) goTo(pageNo + 1);
+  else if (x < 0.25) goTo(pageNo - 1);
+});
+viewer.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  tStart = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, time: Date.now() } : null;
+}, { passive: true });
+viewer.addEventListener('touchend', e => {
+  if (!tStart) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - tStart.x, dy = t.clientY - tStart.y, dt = Date.now() - tStart.time;
+  tStart = null;
+  if (!canFlip() || hasSel() || dt > 800) return;
+  if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 2) return;
+  goTo(pageNo + (dx < 0 ? 1 : -1));
+}, { passive: true });
+
+/* ---------- Chat directo con Gemini (sin contexto del libro) ---------- */
+
+let chatHist = [], chatBusy = false;
+
+function mdInto(el, text) {
+  const lines = text.split('\n');
+  lines.forEach((line, i) => {
+    line = line.replace(/^\s*[*-]\s+/, '• ').replace(/^#{1,6}\s+/, '');
+    line.split(/(\*\*[^*]+\*\*)/).forEach(part => {
+      if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
+        const b = document.createElement('strong');
+        b.textContent = part.slice(2, -2);
+        el.appendChild(b);
+      } else {
+        el.appendChild(document.createTextNode(part));
+      }
+    });
+    if (i < lines.length - 1) el.appendChild(document.createTextNode('\n'));
+  });
+}
+function addMsg(who, text) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + who;
+  d.textContent = text;
+  $('chatLog').appendChild(d);
+  $('chatLog').scrollTop = $('chatLog').scrollHeight;
+  return d;
+}
+async function sendChat() {
+  const text = $('chatIn').value.trim();
+  if (!text || chatBusy) return;
+  const key = getKey();
+  if (!key) { $('settings').hidden = false; $('info').textContent = 'Primero guarda tu clave de Gemini'; return; }
+  chatBusy = true;
+  $('chatSend').disabled = true;
+  addMsg('me', text);
+  $('chatIn').value = '';
+  chatHist.push({ role: 'user', parts: [{ text }] });
+  const box = addMsg('ai', 'Pensando…');
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: chatHist })
+    });
+    const data = await r.json();
+    const reply = (data?.candidates?.[0]?.content?.parts || []).filter(p => !p.thought).map(p => p.text || '').join('');
+    if (reply) {
+      box.textContent = '';
+      mdInto(box, reply);
+      chatHist.push({ role: 'model', parts: [{ text: reply }] });
+    } else {
+      chatHist.pop();
+      $('chatIn').value = text;
+      box.textContent = 'Gemini no respondió: ' + (data?.error?.message || 'revisa tu clave');
+    }
+  } catch (e) {
+    chatHist.pop();
+    $('chatIn').value = text;
+    box.textContent = 'No pude conectar con Gemini. Revisa tu internet.';
+  }
+  chatBusy = false;
+  $('chatSend').disabled = false;
+  $('chatLog').scrollTop = $('chatLog').scrollHeight;
+}
+$('chatBtn').onclick = () => { $('chat').hidden = !$('chat').hidden; if (!$('chat').hidden) $('chatIn').focus(); };
+$('chatSend').onclick = sendChat;
+$('chatNew').onclick = () => { chatHist = []; $('chatLog').textContent = ''; $('chatIn').focus(); };
+$('chatIn').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer: coarse)').matches) { e.preventDefault(); sendChat(); }
+});
+
 /* ---------- Inicio ---------- */
 
 mode = pref('lector-pdf-mode') || 'normal';
@@ -851,6 +984,7 @@ $('bg').value = savedBg;
 applyBg(savedBg);
 applyLayout();
 renderLibrary();
+setBar(pref('lector-pdf-bar') !== '0');
 
 /* ---------- App instalable y sin internet ---------- */
 if ('serviceWorker' in navigator) {
